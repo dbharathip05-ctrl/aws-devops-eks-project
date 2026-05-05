@@ -1,0 +1,13 @@
+# helm/myrocketapp/Chart.yaml
+apiVersion: v2
+name: myrocketapp
+description: Divya DevOps Demo App — AWS EKS + Terraform + Jenkins
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - devops
+  - aws
+  - kubernetes
+maintainers:
+  - name: Divya Bharathi Prasannakumar

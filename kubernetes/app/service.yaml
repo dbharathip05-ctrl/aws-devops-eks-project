@@ -1,0 +1,43 @@
+# kubernetes/app/service.yaml
+# Exposes your pods inside the cluster as a stable network endpoint
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: divya-devops-app-svc
+  labels:
+    app: divya-devops-app
+spec:
+  selector:
+    app: divya-devops-app  # finds pods with this label
+  ports:
+  - name: http
+    port: 80           # port the Service listens on
+    targetPort: 3000   # port your Node.js app listens on
+    protocol: TCP
+  type: ClusterIP      # only reachable inside cluster — Ingress routes external traffic
+
+---
+# kubernetes/app/ingress.yaml
+# The front door — routes internet traffic to your service
+# Nginx Ingress Controller must be installed first (via Helm)
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: divya-devops-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: divya-devops-app-svc
+            port:
+              number: 80

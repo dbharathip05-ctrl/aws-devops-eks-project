@@ -1,0 +1,73 @@
+# kubernetes/app/deployment.yaml
+# Tells Kubernetes: run 2 copies of the app, restart if it crashes
+# Image comes from YOUR ECR: 051797965283.dkr.ecr.ap-south-1.amazonaws.com/divya-app
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: divya-devops-app
+  labels:
+    app: divya-devops-app
+    project: divya-devops
+    managed-by: helm
+spec:
+  replicas: 2   # run 2 copies — if one crashes, the other keeps running
+
+  selector:
+    matchLabels:
+      app: divya-devops-app
+
+  # Zero-downtime deployment — Kubernetes starts new pods before stopping old ones
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0   # never have 0 pods running during deploy
+      maxSurge: 1         # allow 1 extra pod during deploy
+
+  template:
+    metadata:
+      labels:
+        app: divya-devops-app
+    spec:
+      containers:
+      - name: divya-devops-app
+        # YOUR ECR image URL — Jenkins updates the tag with each build
+        image: 051797965283.dkr.ecr.ap-south-1.amazonaws.com/divya-app:latest
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 3000
+          name: http
+
+        env:
+        - name: APP_VERSION
+          value: "1.0"
+        - name: PORT
+          value: "3000"
+
+        # CPU and memory limits — protects the cluster from runaway pods
+        resources:
+          requests:
+            cpu: "100m"      # 0.1 CPU core minimum
+            memory: "128Mi"  # 128 MB RAM minimum
+          limits:
+            cpu: "200m"      # 0.2 CPU core maximum
+            memory: "256Mi"  # 256 MB RAM maximum
+
+        # Liveness probe — Kubernetes restarts the pod if this fails
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          failureThreshold: 3
+
+        # Readiness probe — pod only receives traffic when this passes
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3

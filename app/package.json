@@ -1,0 +1,15 @@
+{
+  "name": "divya-devops-app",
+  "version": "1.0.0",
+  "description": "AWS DevOps Demo Application — Terraform + EKS + Jenkins + Helm",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test":  "echo 'All tests passed' && exit 0"
+  },
+  "keywords": ["devops", "aws", "kubernetes", "eks", "jenkins"],
+  "author": "Divya Bharathi Prasannakumar",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

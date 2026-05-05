@@ -1,0 +1,143 @@
+// jenkins/Jenkinsfile.terraform
+// ─────────────────────────────────────────────────────────────────
+// Terraform Pipeline — Build / Plan / Apply / Destroy EKS cluster
+// AWS Account: 051797965283 | Region: ap-south-1
+// ─────────────────────────────────────────────────────────────────
+// HOW TO USE:
+//   In Jenkins → Build with Parameters
+//   Tick PLAN_TERRAFORM first → review output
+//   Then tick APPLY_TERRAFORM to actually build
+//   Tick DESTROY_TERRAFORM when done practicing (saves money!)
+// ─────────────────────────────────────────────────────────────────
+
+pipeline {
+    agent any
+
+    parameters {
+        booleanParam(name: 'PLAN_TERRAFORM',    defaultValue: false,
+                     description: '✅ Show what Terraform WILL build (safe — does not create anything)')
+        booleanParam(name: 'APPLY_TERRAFORM',   defaultValue: false,
+                     description: '⚠️  Actually BUILD the EKS cluster on AWS (~15-20 mins, costs money)')
+        booleanParam(name: 'DESTROY_TERRAFORM', defaultValue: false,
+                     description: '🗑️  DESTROY the EKS cluster (run when done to stop AWS charges)')
+    }
+
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                deleteDir()  // clean workspace
+                git branch: 'main',
+                    url: 'https://github.com/dbharathip05-ctrl/aws-devops-eks-project.git'
+                sh 'ls -lart'
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials-divya'  // set in Jenkins Credentials
+                ]]) {
+                    dir('terraform') {
+                        sh 'echo "=== Terraform Init ==="'
+                        sh 'terraform init'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials-divya'
+                ]]) {
+                    dir('terraform') {
+                        sh 'echo "=== Terraform Validate ==="'
+                        sh 'terraform validate'
+                        echo "✅ Configuration is valid"
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                script {
+                    if (params.PLAN_TERRAFORM) {
+                        withCredentials([[
+                            $class: 'AmazonWebServicesCredentialsBinding',
+                            credentialsId: 'aws-credentials-divya'
+                        ]]) {
+                            dir('terraform') {
+                                sh 'echo "=== Terraform Plan — review this before Apply ==="'
+                                sh 'terraform plan -out=tfplan'
+                                // Save plan as artifact so you can review it
+                                archiveArtifacts artifacts: 'tfplan', allowEmptyArchive: true
+                            }
+                        }
+                    } else {
+                        echo "⏭️  PLAN_TERRAFORM not selected — skipping"
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                script {
+                    if (params.APPLY_TERRAFORM) {
+                        withCredentials([[
+                            $class: 'AmazonWebServicesCredentialsBinding',
+                            credentialsId: 'aws-credentials-divya'
+                        ]]) {
+                            dir('terraform') {
+                                sh 'echo "=== Terraform Apply — building EKS cluster ==="'
+                                sh 'terraform apply -auto-approve'
+                                sh 'terraform output > /tmp/terraform-output.txt'
+                                sh 'cat /tmp/terraform-output.txt'
+                                // Connect kubectl to the new cluster
+                                sh '''
+                                    aws eks update-kubeconfig \
+                                        --name divya-eks-cluster \
+                                        --region ap-south-1
+                                    kubectl get nodes
+                                '''
+                            }
+                        }
+                    } else {
+                        echo "⏭️  APPLY_TERRAFORM not selected — skipping"
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Destroy') {
+            steps {
+                script {
+                    if (params.DESTROY_TERRAFORM) {
+                        withCredentials([[
+                            $class: 'AmazonWebServicesCredentialsBinding',
+                            credentialsId: 'aws-credentials-divya'
+                        ]]) {
+                            dir('terraform') {
+                                sh 'echo "=== Terraform Destroy — removing EKS cluster ==="'
+                                sh 'terraform destroy -auto-approve'
+                                echo "✅ Cluster destroyed — AWS charges stopped"
+                            }
+                        }
+                        cleanWs()
+                    } else {
+                        echo "⏭️  DESTROY_TERRAFORM not selected — skipping"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success { echo "✅ Terraform pipeline completed successfully!" }
+        failure { echo "❌ Terraform pipeline failed — check the logs above" }
+    }
+}

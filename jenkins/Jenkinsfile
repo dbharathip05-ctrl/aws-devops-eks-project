@@ -1,0 +1,157 @@
+// jenkins/Jenkinsfile
+// ─────────────────────────────────────────────────────────────────
+// CI/CD Pipeline — Divya Bharathi Prasannakumar
+// AWS Account: 051797965283 | Region: ap-south-1
+// Flow: GitHub → SonarQube → Build → Docker → ECR → Helm → EKS
+// ─────────────────────────────────────────────────────────────────
+
+pipeline {
+    agent any
+
+    environment {
+        // ── YOUR REAL AWS DETAILS ─────────────────────────────────
+        AWS_REGION       = 'ap-south-1'
+        AWS_ACCOUNT_ID   = '051797965283'
+        ECR_REPO         = '051797965283.dkr.ecr.ap-south-1.amazonaws.com/divya-app'
+        EKS_CLUSTER_NAME = 'divya-eks-cluster'
+
+        // ── Pipeline config ───────────────────────────────────────
+        IMAGE_TAG        = "v${BUILD_NUMBER}"
+        KUBECONFIG_PATH  = '/opt/kube/config'
+        HELM_CHART_PATH  = './helm/myrocketapp'
+    }
+
+    stages {
+
+        // ── Stage 1: Pull code from GitHub ────────────────────────
+        stage('SCM Checkout') {
+            steps {
+                script {
+                    git branch: 'main',
+                        credentialsId: 'git-cred',
+                        url: 'https://github.com/dbharathip05-ctrl/aws-devops-eks-project.git'
+                }
+            }
+        }
+
+        // ── Stage 2: SonarQube code quality scan ──────────────────
+        // SonarQube reads your code and finds bugs/security issues
+        stage('SonarQube SAST') {
+            steps {
+                script {
+                    def scannerHome = tool 'sonarscanner4'
+                    withSonarQubeEnv('sonar-pro') {
+                        sh "${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=divya-devops-app \
+                            -Dsonar.sources=./app"
+                    }
+                }
+            }
+        }
+
+        // ── Stage 3: Install app dependencies ─────────────────────
+        stage('Build') {
+            steps {
+                script {
+                    sh 'cd app && npm install'
+                    sh 'cd app && npm test'
+                }
+            }
+        }
+
+        // ── Stage 4: Build Docker image ───────────────────────────
+        // Packages your app into a container with version tag
+        stage('Docker Build') {
+            steps {
+                script {
+                    sh "docker build -t divya-app:${IMAGE_TAG} ./app"
+                    sh 'docker images | grep divya-app'
+                }
+            }
+        }
+
+        // ── Stage 5: Push to AWS ECR ──────────────────────────────
+        // ECR = Amazon's private Docker Hub
+        // URL: 051797965283.dkr.ecr.ap-south-1.amazonaws.com/divya-app
+        stage('Push to ECR') {
+            steps {
+                script {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-credentials-divya'  // set this in Jenkins
+                    ]]) {
+                        def fullImageName = "${ECR_REPO}:${IMAGE_TAG}"
+
+                        // Login to ECR
+                        sh """
+                            aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${ECR_REPO}
+                        """
+
+                        // Tag and push
+                        sh "docker tag divya-app:${IMAGE_TAG} ${fullImageName}"
+                        sh "docker push ${fullImageName}"
+
+                        echo "✅ Image pushed: ${fullImageName}"
+                    }
+                }
+            }
+        }
+
+        // ── Stage 6: Deploy to EKS via Helm ──────────────────────
+        // Helm packages all your Kubernetes YAML files and deploys
+        stage('Deploy to EKS') {
+            steps {
+                script {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-credentials-divya'
+                    ]]) {
+                        // Connect kubectl to your EKS cluster
+                        sh """
+                            aws eks update-kubeconfig \
+                                --name ${EKS_CLUSTER_NAME} \
+                                --region ${AWS_REGION} \
+                                --kubeconfig ${KUBECONFIG_PATH}
+                        """
+
+                        // Deploy or upgrade using Helm
+                        // --set image.tag overrides the version in values.yaml
+                        sh """
+                            helm upgrade --install divya-app ${HELM_CHART_PATH} \
+                                --set image.tag=${IMAGE_TAG} \
+                                --set image.repository=${ECR_REPO} \
+                                --kubeconfig ${KUBECONFIG_PATH} \
+                                --wait \
+                                --timeout 5m
+                        """
+
+                        // Verify the deployment
+                        sh "kubectl get pods --kubeconfig ${KUBECONFIG_PATH}"
+                        sh "kubectl get svc  --kubeconfig ${KUBECONFIG_PATH}"
+                        sh "kubectl get ingress --kubeconfig ${KUBECONFIG_PATH}"
+                        sh "helm ls --kubeconfig ${KUBECONFIG_PATH}"
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Post-build notifications ───────────────────────────────────
+    post {
+        success {
+            echo """
+            ✅ PIPELINE SUCCESS!
+            Image: ${ECR_REPO}:v${BUILD_NUMBER}
+            Cluster: ${EKS_CLUSTER_NAME} (${AWS_REGION})
+            """
+        }
+        failure {
+            echo "❌ PIPELINE FAILED — check the stage logs above"
+        }
+        always {
+            // Clean up local Docker images to free disk space
+            sh "docker rmi divya-app:${IMAGE_TAG} || true"
+        }
+    }
+}
