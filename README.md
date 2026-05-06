@@ -195,7 +195,7 @@ terraform destroy -auto-approve
 ## Author
 
 **Divya Bharathi Prasannakumar**
-DevOps Engineer | Friedberg, Germany
+DevOps Engineer | Friedberg, Germany  |
 Permanent Residence  | English C1 | German B2
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?logo=linkedin)](https://linkedin.com/in/divya-bharathi-prasannakumar)
