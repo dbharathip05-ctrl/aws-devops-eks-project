@@ -190,6 +190,7 @@ terraform destroy -auto-approve
 
 ⚠️ Always run `terraform destroy` after practice to stop charges!
 
+
 ---
 
 ## Author
