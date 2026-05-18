@@ -58,6 +58,7 @@ spec:
     targetPort: {{ .Values.service.targetPort }}
   type: {{ .Values.service.type }}
 ---
+
 {{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
