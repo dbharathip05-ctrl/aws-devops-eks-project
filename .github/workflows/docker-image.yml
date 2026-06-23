@@ -1,13 +1,22 @@
 name: Docker Image CI
+
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build ./app --file ./app/Dockerfile --tag myrocketapp:${{ github.sha }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build ./app \
+            --file ./app/Dockerfile \
+            --tag myrocketapp:${{ github.sha }}
+          echo "Built successfully: myrocketapp:${{ github.sha }}"
