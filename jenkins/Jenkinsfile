@@ -1,9 +1,9 @@
 // jenkins/Jenkinsfile
-// ─────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────
 // CI/CD Pipeline — Divya Bharathi Prasannakumar
 // AWS Account: 051797965283 | Region: ap-south-1
 // Flow: GitHub → SonarQube → Build → Docker → ECR → Helm → EKS
-// ─────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────
 
 pipeline {
     agent any
@@ -64,7 +64,7 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    sh "docker build -t divya-app:${IMAGE_TAG} ./app"
+                    sh "docker build ./app --file ./app/Dockerfile -t divya-app:${IMAGE_TAG}"
                     sh 'docker images | grep divya-app'
                 }
             }
