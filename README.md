@@ -1,132 +1,101 @@
-#  AWS DevOps EKS Platform
+# aws-devops-eks-project
 
-End-to-end AWS DevOps project demonstrating cloud infrastructure provisioning, CI/CD automation, containerization, and Kubernetes deployment using Terraform, Jenkins, Docker, and Amazon EKS.
+![CI](https://github.com/dbharathip05-ctrl/aws-devops-eks-project/actions/workflows/docker-image.yml/badge.svg)
 
-## Key Highlights
-- AWS Infrastructure provisioning with Terraform
-- Kubernetes deployment on Amazon EKS
-- CI/CD pipeline using Jenkins
-- Docker image build and AWS ECR integration
-- Helm-based Kubernetes deployments
-- Monitoring-ready and production-style setup
-
-**AWS Region:** ap-south-1 (Mumbai)
+This is my personal DevOps project where I built a complete CI/CD pipeline 
+from scratch using AWS, Docker, Kubernetes, Helm, ArgoCD, and Terraform.
+The goal was to automate everything — from a developer pushing code, 
+all the way to the application running in a Kubernetes cluster on AWS EKS,
+without any manual steps in between.
 
 ---
 
-## Architecture Overview
+## What this project does
 
-GitHub → Jenkins CI/CD → Docker Build → AWS ECR → Amazon EKS → Kubernetes Deployment via Helm
+When a developer pushes code to the main branch, GitHub Actions automatically
+builds a Docker image and pushes it to AWS ECR. Jenkins then updates the image
+tag in the Helm chart. ArgoCD detects that change in Git and deploys the new
+version to the EKS cluster automatically. Prometheus and Grafana watch the
+running pods and alert if something goes wrong.
 
-## Skills Demonstrated
-
-- AWS Cloud Infrastructure
-- Terraform (Infrastructure as Code)
-- Kubernetes (Amazon EKS)
-- Docker Containerization
-- CI/CD Automation
-- Jenkins Pipelines
-- Helm Deployments
-- Monitoring & Cloud Operations
-- DevOps Best Practices
-```
+The whole cycle takes under 5 minutes — from git push to running pods in EKS.
 
 ---
 
-## Tools & Technologies
+## Why I built it this way
 
-| Category        | Tool / Service                                      |
-|-----------------|-----------------------------------------------------|
-| Cloud           | AWS (EKS, ECR, VPC, IAM, S3, ap-south-1)           |
-| Infrastructure  | Terraform (VPC module + EKS module)                 |
-| CI/CD           | Jenkins (declarative pipeline)                      |
-| Code Quality    | SonarQube (SAST scanning)                           |
-| Containers      | Docker, AWS ECR                                     |
-| Orchestration   | Kubernetes (EKS 1.30), Helm                         |
-| Ingress         | Nginx Ingress Controller                            |
-| Scripting       | Bash, Groovy (Jenkinsfile)                          |
-| Version Control | Git / GitHub                                        |
+I wanted to implement real GitOps — where Git is the single source of truth.
+No one runs kubectl apply manually in production. Every change goes through Git,
+every deployment is traceable, and ArgoCD self-heals if someone accidentally 
+changes something directly in the cluster.
+
+I also focused on security from the start — containers run as non-root users,
+secrets never live in code or Git, and every AWS service uses IAM roles 
+instead of hardcoded credentials.
 
 ---
 
-## Repository Structure
+## Tools used
 
-- terraform/ → AWS infrastructure provisioning
-- app/ → Sample Node.js application
-- jenkins/ → Jenkins CI/CD pipelines
-- kubernetes/ → Kubernetes manifests
-- helm/ → Helm chart deployment
-- scripts/ → Automation scripts
-
-## Project Objective
-
-This project was created to practice and demonstrate hands-on DevOps and AWS Cloud Engineering skills including infrastructure automation, Kubernetes orchestration, CI/CD implementation, and cloud operations workflows.
-
-
-```
+- **Docker** — multi-stage build to keep the image small (~150MB not ~900MB)
+- **GitHub Actions** — CI pipeline that builds and pushes the image on every commit
+- **Jenkins** — bumps the image tag in values.yaml and triggers ArgoCD
+- **AWS ECR** — private Docker registry inside my AWS account
+- **Helm** — packages the Kubernetes deployment so one chart works for dev, staging, and production
+- **ArgoCD** — watches the GitHub repo and auto-deploys when values.yaml changes
+- **Kubernetes / EKS** — runs the containers, handles scaling and self-healing
+- **Terraform** — builds the entire AWS infrastructure as code — VPC, EKS, IAM, ECR
+- **Prometheus + Grafana** — monitors pod metrics and shows dashboards
 
 ---
 
-## Screenshots
+## Folder structure
+app/                 The Node.js application and Dockerfile
 
-> Screenshots will be added after first successful deployment
+helm/myrocketapp/    Helm chart with values.yaml for each environment
 
-### Jenkins Pipeline — All Stages Green
-<!-- ![Jenkins Pipeline](docs/jenkins-pipeline.png) -->
+jenkins/             Jenkinsfile defining all 6 pipeline stages
 
-### SonarQube Code Quality Report
-<!-- ![SonarQube](docs/sonarqube-report.png) -->
+kubernetes/          Kubernetes manifests and ArgoCD Application config
 
-### EKS Nodes Running
-<!-- ![EKS Nodes](docs/eks-nodes.png) -->
+terraform/           All AWS infrastructure defined as Terraform code
 
-### Application Running via Nginx Ingress
-<!-- ![App](docs/app-running.png) -->
+.github/workflows/   GitHub Actions CI workflow
 
 ---
 
-## How to Deploy
+## Some decisions I made along the way
 
-### Prerequisites
-- AWS account with IAM user (Access Key + Secret Key)
-- Jenkins EC2 server (t2.large, Ubuntu 22.04)
-- All tools installed via `scripts/install-all-tools.sh`
+I set replicaCount to 3 in production — not 1 or 2. With 3 replicas spread
+across 3 Availability Zones, even if one entire AZ goes down, the app keeps
+running. With 2 replicas you can end up with zero pods in one zone.
 
-## Deployment Workflow
+I set maxUnavailable to 0 in the rolling update strategy. This means Kubernetes
+never kills an old pod before the new one is fully ready. Zero-downtime updates,
+every time.
 
-1. Provision AWS infrastructure using Terraform
-2. Configure EKS cluster access
-3. Build Docker image and push to AWS ECR
-4. Run Jenkins CI/CD pipeline
-5. Deploy application to Kubernetes using Helm
-```
+I added a PodDisruptionBudget with minAvailable: 2. During a cluster upgrade
+or node drain, Kubernetes now knows it must keep at least 2 pods alive. Without
+this, it could evict all pods at once.
 
----
+The Docker image runs as a non-root user called appuser. Even if the app is
+compromised, the attacker gets no root access inside the container. This is
+enforced in both the Dockerfile and the Kubernetes securityContext.
 
-## Cost Warning
-
-| Resource | Cost |
-|----------|------|
-| EKS Control Plane | ~$0.10/hour |
-| 2x t3.medium nodes | ~$0.084/hour |
-| NAT Gateway | ~$0.045/hour |
-| **Total** | **~$0.23/hour (~$5.50/day)** |
-
-⚠️ Always run `terraform destroy` after practice to stop charges!
-
+Resource limits are set on every pod — 500m CPU and 512Mi memory. Without
+limits, one misbehaving pod can starve all others on the same node and cause
+OOMKilled errors across the cluster.
 
 ---
 
-## Author
+## Current status
 
-## Author
+The GitHub Actions pipeline is passing — you can see the green badge above.
+The Dockerfile, Helm chart, and Kubernetes manifests are complete and
+production-ready. Terraform and the full ArgoCD deployment are still in
+progress — I am building them incrementally to avoid unnecessary AWS costs
+while the architecture is being refined.
 
-Divya Bharathi Prasannakumar  
-AWS Cloud & DevOps Engineer  
-Friedberg, Germany  
+---
 
-- AWS Certified Solutions Architect – Associate
-- Terraform | Kubernetes | CI/CD | Docker | AWS
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?logo=linkedin)](https://linkedin.com/in/divya-bharathi-prasannakumar)
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github)](https://github.com/dbharathip05-ctrl)
+*Divya Bharathi Prasannakumar — DevOps Engineer — Friedberg, Germany*
