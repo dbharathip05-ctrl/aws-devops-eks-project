@@ -1,97 +1,21 @@
-# helm/myrocketapp/values.yaml
-# Jenkins overrides image.tag on every build
-# ArgoCD reads this file and syncs to EKS automatically
+# Multi-stage build for Node.js application
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
 
-# ── Image ──────────────────────────────────────────────────
-image:
-    # ECR URL — keep account ID in GitHub Secret, not here
-    # Jenkins sets this at deploy time via --set image.repository
-  repository: 051797965283.dkr.ecr.ap-south-1.amazonaws.com/divya-app
-  pullPolicy: Always
-    # Jenkins writes: sed -i "s|tag:.*|tag: \"v${BUILD_NUMBER}\"|"
-  tag: "latest"
+# Runtime stage
+FROM node:18-alpine
+WORKDIR /app
+RUN addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
 
-# ── Replicas ───────────────────────────────────────────────
-# Changed 2 → 3: survive one AZ failure, HA during rolling update
-replicaCount: 3
+COPY --from=builder /app/node_modules ./node_modules
+COPY --chown=appuser:appuser . .
 
-# ── Rolling update — zero downtime ─────────────────────────
-# maxUnavailable: 0 = never kill old pod before new is ready
-# maxSurge: 1 = one extra pod created during update
-strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxUnavailable: 0
-    maxSurge:       1
+EXPOSE 3000
+USER appuser
 
-# ── Resource limits ────────────────────────────────────────
-# Your values are correct — keeping them
-# requests = guaranteed, limits = hard ceiling (OOMKilled above)
-resources:
-  requests:
-    cpu:    "100m"
-    memory: "128Mi"
-  limits:
-    cpu:    "200m"
-    memory: "256Mi"
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1))"
 
-# ── Probes ─────────────────────────────────────────────────
-# readiness: stops traffic if fails — liveness: restarts pod if fails
-# Different initialDelay: readiness starts early, liveness gives more time
-readinessProbe:
-  httpGet:
-    path: /health
-    port: 3000
-  initialDelaySeconds: 5
-  periodSeconds:       10
-  failureThreshold:    3
-
-livenessProbe:
-  httpGet:
-    path: /health
-    port: 3000
-  initialDelaySeconds: 15
-  periodSeconds:       30
-  failureThreshold:    3
-
-# ── Security context — ADDED ────────────────────────────────
-# Enforces non-root at Kubernetes level (matches Dockerfile USER appuser)
-# Even if Dockerfile is misconfigured, Kubernetes rejects root containers
-securityContext:
-  runAsNonRoot:             true
-  runAsUser:                1000
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop: ["ALL"]
-
-# ── Service ────────────────────────────────────────────────
-service:
-  type:       ClusterIP
-  port:       80
-  targetPort: 3000
-
-# ── Ingress ────────────────────────────────────────────────
-ingress:
-  enabled:   true
-  className: nginx
-  hosts:
-    - host: divya-app.example.com   # replace with your real domain
-      paths:
-        - path:     /
-          pathType: Prefix
-
-# ── Horizontal Pod Autoscaler — ADDED ──────────────────────
-# Scale 3 → 10 pods when CPU exceeds 70%
-# Kubernetes creates/removes pods automatically — no manual intervention
-autoscaling:
-  enabled:                        true
-  minReplicas:                    3
-  maxReplicas:                    10
-  targetCPUUtilizationPercentage: 70
-
-# ── Pod Disruption Budget — ADDED ──────────────────────────
-# During node drain or cluster upgrade: always keep 2 pods alive
-# Without this, Kubernetes can evict all pods at once
-podDisruptionBudget:
-  enabled:      true
-  minAvailable: 2
+CMD ["node", "server.js"]
