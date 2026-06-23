@@ -1,4 +1,4 @@
-# AWS DevOps EKS Platform
+#  AWS DevOps EKS Platform
 
 End-to-end AWS DevOps project demonstrating cloud infrastructure provisioning, CI/CD automation, containerization, and Kubernetes deployment using Terraform, Jenkins, Docker, and Amazon EKS.
 
