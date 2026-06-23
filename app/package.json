@@ -1,14 +1,11 @@
 {
-  "name": "divya-devops-app",
+  "name": "myrocketapp",
   "version": "1.0.0",
-  "description": "AWS DevOps Demo Application — Terraform + EKS + Jenkins + Helm",
+  "description": "DevOps demo app — ACONEXT interview",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "test":  "echo 'All tests passed' && exit 0"
+    "start": "node server.js"
   },
-  "keywords": ["devops", "aws", "kubernetes", "eks", "jenkins"],
-  "author": "Divya Bharathi Prasannakumar",
   "dependencies": {
     "express": "^4.18.2"
   }
